@@ -1,0 +1,146 @@
+# Maintainer: Rajiv Ranganath <rajiv.ranganath@atihita.com>
+
+flavor=virtualbox
+pkgname=linux-${flavor}
+pkgver=4.9.65
+
+pkgrel=0
+pkgdesc="Linux kernel"
+url="https://kernel.org"
+depends="mkinitfs"
+makedepends="perl installkernel bash gmp-dev bc linux-headers xz"
+options="!strip !check "
+install=
+source="https://kernel.org/pub/linux/kernel/v4.x/linux-$pkgver.tar.xz
+
+	generated-kernel-patch.patch
+	config-virtualbox.x86_64
+	"
+subpackages="$pkgname-dbg $pkgname-dev"
+
+arch="x86_64"
+license="GPL2"
+
+prepare() {
+	cd "$srcdir"/linux-$pkgver
+	msg "Applying generated-kernel-patch.patch"
+	patch -p1 < "$srcdir"/generated-kernel-patch.patch || return 1
+
+	local builddir="$srcdir"/build
+	mkdir -p "$builddir"
+	cp "$srcdir"/config-${flavor}.${arch} "$builddir"/.config || return 1
+	make -s -C "$srcdir"/linux-$pkgver \
+		ARCH=$arch \
+		O="$builddir" \
+		oldnoconfig || return 1
+}
+
+build() {
+	local builddir="$srcdir"/build
+	local extraver="-${pkgrel}.${arch}-${flavor}"
+
+	sed -i -e "s/^EXTRAVERSION.*$/EXTRAVERSION = \\${extraver}/" "$builddir"/source/Makefile
+	cd "$builddir"
+	make -s ARCH=$arch V=1 bzImage || return 1
+	make -s ARCH=$arch V=1 modules || return 1
+}
+
+package() {
+	local builddir="$srcdir"/build
+
+	cd "$builddir"
+
+	local image_install_path="boot"
+	local install_name="vmlinuz"
+	local kernel_image="arch/x86/boot/bzImage"
+	local kernel_ver="${pkgver}-${pkgrel}.${arch}-${flavor}"
+
+	mkdir -p ${pkgdir}/${image_install_path}
+	mkdir -p ${pkgdir}/lib/modules/${kernel_ver}
+
+	install -m 644 .config ${pkgdir}/boot/config-${kernel_ver}
+	install -m 644 System.map ${pkgdir}/boot/System.map-${kernel_ver}
+	cp ${kernel_image} ${pkgdir}/${image_install_path}/${install_name}-${kernel_ver}
+	chmod 755 ${pkgdir}/${image_install_path}/${install_name}-${kernel_ver}
+	make -s ARCH=$arch \
+		INSTALL_MOD_PATH=$pkgdir \
+		INSTALL_MOD_STRIP=1 \
+		KERNELRELEASE=$kernel_ver \
+		modules_install \
+		mod-fw= || return 1
+
+	rm -f ${pkgdir}/lib/modules/${kernel_ver}/build
+	rm -f ${pkgdir}/lib/modules/${kernel_ver}/source
+}
+
+dbg() {
+	pkgdesc="Linux kernel debugging symbols"
+
+	local builddir="$srcdir"/build
+
+	cd "$builddir"
+
+	local debuginfodir="/usr/lib/debug"
+	local image_install_path="boot"
+	local kernel_ver="${pkgver}-${pkgrel}.${arch}-${flavor}"
+
+	mkdir -p ${subpkgdir}${debuginfodir}/${image_install_path}
+	mkdir -p ${subpkgdir}${debuginfodir}/lib/modules/${kernel_ver}
+
+	cp vmlinux ${subpkgdir}${debuginfodir}/${image_install_path}/vmlinux-${kernel_ver}
+	make -s ARCH=$arch \
+		INSTALL_MOD_PATH=${subpkgdir}${debuginfodir} \
+		KERNELRELEASE=$kernel_ver \
+		modules_install \
+		mod-fw= || return 1
+
+	rm -f ${subpkgdir}${debuginfodir}/lib/modules/${kernel_ver}/build
+	rm -f ${subpkgdir}${debuginfodir}/lib/modules/${kernel_ver}/source
+	rm -f ${subpkgdir}${debuginfodir}/lib/modules/${kernel_ver}/modules.*
+
+	# Add .gnu_debuglink sections to each stripped .ko pointing to
+	# unstripped verson
+	find $pkgdir -name '*.ko' | sed "s|\\${pkgdir}||" | while read module ; do
+		objcopy --add-gnu-debuglink=${subpkgdir}${debuginfodir}${module} \
+			${pkgdir}${module} || return 1
+	done
+}
+
+dev() {
+	pkgdesc="Headers and script for third party modules"
+	depends="gmp-dev bash"
+
+	local kernel_ver="${pkgver}-${pkgrel}.${arch}-${flavor}"
+	local dir="$subpkgdir"/usr/src/linux-headers-${kernel_ver}
+
+	mkdir -p "$dir"
+	cp "$srcdir"/config-${flavor}.${arch} "$dir"/.config || return 1
+	make -s -C "$srcdir"/linux-$pkgver \
+		ARCH=$arch \
+		O="$dir" \
+		oldnoconfig prepare modules_prepare scripts || return 1
+
+	rm "$dir"/Makefile "$dir"/source
+
+	cd "$srcdir"/linux-$pkgver
+	find .  -path './include/*' -prune \
+		-o -path './scripts/*' -prune -o -type f \
+		\( -name 'Makefile*' -o -name 'Kconfig*' -o -name 'Kbuild*' -o \
+		   -name '*.sh' -o -name '*.pl' -o -name '*.lds' \) \
+		-print | cpio -pdm "$dir" || return 1
+
+	cp -a scripts include "$dir" || return 1
+	find $(find arch -name include -type d -print) -type f \
+		| cpio -pdm "$dir"
+
+        install -Dm644 "$srcdir"/build/Module.symvers \
+                "$dir"/Module.symvers
+
+        mkdir -p "$subpkgdir"/lib/modules/${kernel_ver}
+        ln -sf /usr/src/linux-headers-${kernel_ver} \
+                "$subpkgdir"/lib/modules/${kernel_ver}/build
+}
+
+sha512sums="a375d091490e6ab924824d15fbc7ca8876194e63baee772d51af27fefab95f54c3328045cf397a05c0e34f309f4e4f69e7ec333946ff13ed36c989f29ae413df  linux-4.9.65.tar.xz
+d652dc262e74b16749870f791e1e897b0eef77e19d3151004e5e3d31ae00252a302bc82be1f28378bccf84d8553063ff947574b2414014a84b8ecc84b51a34c0  config-virtualbox.x86_64
+e0e056c122d53b9057db415f55ba6771b645f0c6ec9f8145bb765cc22e5eb51ed0fb40ba9a7a9e24bc6f2f42efb157bb813d30fa54555d5eb1904823c839dad6  generated-kernel-patch.patch"

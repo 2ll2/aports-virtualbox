@@ -1,0 +1,278 @@
+# Maintainer: Rajiv Ranganath <rajiv.ranganath@atihita.com>
+pkgname=docker
+pkgver=17.09.1
+_ver=${pkgver}-ce
+pkgrel=0
+_gitcommit=v$_ver
+pkgdesc="Pack, ship and run any application as a lightweight container"
+url="http://www.docker.io/"
+arch="all !s390x"
+license="ASL 2.0"
+depends="ca-certificates iptables"
+makedepends="go bash linux-headers coreutils libseccomp-dev cmake libtool"
+options="!check"
+install="$pkgname.pre-install"
+
+# $ grep COMMIT ./components/engine/hack/dockerfile/binaries-commits
+# TOMLV_COMMIT=9baf8a8a9f2ed20a8e54160840c492f937eeaf9a
+# RUNC_COMMIT=3f2f8b84a77f73d38244dd690525642a72156c64
+# CONTAINERD_COMMIT=06b9cb35161009dcb7123345749fef02f7cea8e0
+# TINI_COMMIT=949e6facb77383876aeff8a6944dde66b3089574
+# LIBNETWORK_COMMIT=7b2b1feb1de4817d522cc372af149ff48d25028e
+# VNDR_COMMIT=9909bb2b8a0b7ea464527b376dc50389c90df587
+# GOMETALINTER_COMMIT=f7b6e55301c9c67035003b7ba7f8a1cde532d338
+
+_runc_ver=3f2f8b84a77f73d38244dd690525642a72156c64
+_containerd_ver=06b9cb35161009dcb7123345749fef02f7cea8e0
+_tini_ver=949e6facb77383876aeff8a6944dde66b3089574
+_libnetwork_ver=7b2b1feb1de4817d522cc372af149ff48d25028e
+
+_cobra_ver="0.0.1"
+_go_md2man_ver="1.0.7"
+
+subpackages="
+	$pkgname-bash-completion:bashcomp:noarch
+	$pkgname-fish-completion:fishcomp:noarch
+	$pkgname-zsh-completion:zshcomp:noarch
+	$pkgname-vim:vim:noarch
+	$pkgname-doc
+	"
+source="
+	docker-$pkgver.tar.gz::https://github.com/docker/docker-ce/archive/v$_ver.tar.gz
+	runc-$_runc_ver.tar.gz::https://github.com/docker/runc/archive/$_runc_ver.tar.gz
+	containerd-$_containerd_ver.tar.gz::https://github.com/docker/containerd/archive/$_containerd_ver.tar.gz
+	libnetwork-$_libnetwork_ver.tar.gz::https://github.com/docker/libnetwork/archive/$_libnetwork_ver.tar.gz
+	tini-$_tini_ver.tar.gz::https://github.com/krallin/tini/archive/$_tini_ver.tar.gz
+	go-md2man-$_go_md2man_ver.tar.gz::https://github.com/cpuguy83/go-md2man/archive/v$_go_md2man_ver.tar.gz
+	cobra-$_cobra_ver.tar.gz::https://github.com/spf13/cobra/archive/v$_cobra_ver.tar.gz
+	tini-cmake-fixes.patch
+	docker-openrc-busybox-ash.patch
+	lambda2-01-engine-add-support-for-build.patch
+	lambda2-02-cli-add-support-for-build-time.patch
+	lambda2-03-engine-router-network-remove.patch
+	lambda2-04-engine-router-system-remove.patch
+	lambda2-05-engine-cmd-dockerd-drop.patch
+	lambda2-06-engine-container_operations.patch
+	lambda2-07-engine-daemon-events-remove.patch
+	lambda2-08-engine-cmd-dockerd-remove.patch
+	lambda2-09-cli-commands-remove-swarm.patch
+	lambda2-10-cli-commands-remove-support.patch
+	lambda2-11-engine-daemon-only-support.patch
+	lambda2-12-engine-pkg-discovery-remove.patch
+	lambda2-13-engine-daemon-only-attempt-to.patch
+	"
+
+_dockerdir="$srcdir"/docker-$_ver
+_cli_builddir="$_dockerdir"/components/cli
+_daemon_builddir="$_dockerdir"/components/engine
+_buildtags="exclude_graphdriver_aufs exclude_graphdriver_devicemapper exclude_graphdriver_btrfs"
+_runc_buildtags="seccomp"
+_runc_builddir="$srcdir"/runc-$_runc_ver
+
+_containerd_builddir="$srcdir"/containerd-$_containerd_ver
+_libnetwork_builddir="$srcdir"/libnetwork-$_libnetwork_ver
+_tini_builddir="$srcdir"/tini-$_tini_ver
+
+_apply_patches() {
+	local _dir="$1"
+	local _prefix="$2"
+	local i
+	msg "applying patches for $_prefix"
+	cd "$_dir"
+	for i in $source; do
+		case $i in
+		${_prefix}-*.patch) msg $i; patch -p1 -i "$srcdir"/$i;;
+		esac
+	done
+}
+
+prepare() {
+	# Rename 'docker-ce-VER' to 'docker-VER'
+	mv "$srcdir"/docker-ce-$_ver "$_dockerdir"
+
+	_apply_patches "$_daemon_builddir" docker
+	_apply_patches "$_runc_builddir" runc
+	_apply_patches "$_tini_builddir" tini
+
+	_apply_patches "$_dockerdir" lambda2
+}
+
+build() {
+	export AUTO_GOPATH=1
+
+	export DOCKER_GITCOMMIT=$_gitcommit
+	export DOCKER_BUILDTAGS=$_buildtags
+	unset CC # prevent possible ccache issues
+
+	# containerd
+	msg "building containerd"
+	cd "$_containerd_builddir"
+	mkdir -p src/github.com/containerd/
+	ln -s "$_containerd_builddir" src/github.com/containerd/containerd
+	##### Workaround for v17.{09,10}.X unreachable vendor dir
+	mkdir -p vendor/src/
+	mv vendor/g* vendor/src
+	#####
+	GOPATH="$PWD" LDFLAGS="" make GIT_COMMIT="$_containerd_ver"
+
+	# libnetwork (docker-proxy)
+	msg "building docker-proxy"
+	cd "$_libnetwork_builddir"
+	mkdir -p src/github.com/docker/
+	ln -s "$_libnetwork_builddir" src/github.com/docker/libnetwork
+	GOPATH="$PWD" go build -v -ldflags="-linkmode=external" -o docker-proxy github.com/docker/libnetwork/cmd/proxy
+
+	# runc
+	msg "building runc"
+	cd "$_runc_builddir"
+	mkdir -p src/github.com/opencontainers/
+	ln -s "$_runc_builddir" src/github.com/opencontainers/runc
+	cd src/github.com/opencontainers/runc
+	GOPATH="$PWD" make COMMIT="$_runc_ver"
+
+	# tini
+	msg "building tini"
+	cd "$_tini_builddir"
+	cmake -DVERSION_GIT=$_tini_ver
+	make tini-static
+
+	# daemon
+	msg "building daemon"
+	cd "$_daemon_builddir"
+	mkdir -p src/github.com/docker/
+	ln -s "$_daemon_builddir" src/github.com/docker/docker
+
+	# We need to link to cli package because our patches to engine
+	# references to cli
+	ln -s "$_cli_builddir" vendor/github.com/docker/cli
+
+	GOPATH="$PWD" VERSION="$_ver" hack/make.sh dynbinary
+
+	# Required for building man-pages
+	export GOPATH="$_cli_builddir"
+	export GOBIN="$GOPATH/bin"
+	export PATH="$GOBIN:$PATH"
+
+	# cli
+	msg "building cli"
+	cd "$_cli_builddir"
+	mkdir -p "$GOPATH"/src/github.com/docker/
+	ln -s "$_cli_builddir" "$GOPATH"/src/github.com/docker/cli
+	LDFLAGS="" make VERSION="$_ver" dynbinary
+
+	# docker man
+	msg "building docker man pages"
+	cd "$srcdir"
+	# cobra
+	mkdir -p "$GOPATH"/src/github.com/spf13/
+	ln -sf "$PWD"/cobra-$_cobra_ver "$GOPATH"/src/github.com/spf13/cobra
+	# md2man
+	mkdir -p "$GOPATH"/src/github.com/cpuguy83/
+	ln -s "$PWD"/go-md2man-$_go_md2man_ver "$GOPATH"/src/github.com/cpuguy83/go-md2man
+	cd "$GOPATH"/src/github.com/cpuguy83/go-md2man
+	go get
+
+	# convert md to man pages
+	msg "generating man pages"
+	cd "$_cli_builddir"
+	make manpages
+}
+
+package() {
+	cd "$_dockerdir"
+	local ver=$(cat VERSION)
+
+	install -Dm755 "$_cli_builddir"/build/docker \
+		"$pkgdir"/usr/bin/docker
+
+	install -Dm755 "$_daemon_builddir"/bundles/$ver/dynbinary-daemon/dockerd-$ver \
+		"$pkgdir"/usr/bin/dockerd
+
+	install -Dm755 "$_libnetwork_builddir"/docker-proxy \
+		"$pkgdir"/usr/bin/docker-proxy
+
+	install -Dm755 "$_runc_builddir"/runc \
+		"$pkgdir"/usr/bin/docker-runc
+
+	install -Dm755 "$_containerd_builddir"/bin/containerd \
+		"$pkgdir"/usr/bin/docker-containerd
+
+	install -Dm755 "$_containerd_builddir"/bin/containerd-shim \
+		"$pkgdir"/usr/bin/docker-containerd-shim
+
+	install -Dm755 "$_containerd_builddir"/bin/ctr \
+		"$pkgdir"/usr/bin/docker-containerd-ctr
+
+	install -Dm755 "$_tini_builddir"/tini-static \
+		"$pkgdir"/usr/bin/docker-init
+
+	install -Dm755 "$_daemon_builddir"/contrib/init/openrc/docker.initd \
+		"$pkgdir"/etc/init.d/docker
+	install -Dm644 "$_daemon_builddir"/contrib/init/openrc/docker.confd \
+		"$pkgdir"/etc/conf.d/docker
+
+	mkdir -p "$pkgdir"/usr/share/man/man1
+	install -Dm644 "$_cli_builddir"/man/man1/* \
+		"$pkgdir"/usr/share/man/man1
+}
+
+bashcomp() {
+	pkgdesc="Bash completion for Docker"
+	depends=""
+	install_if="$pkgname=$pkgver-r$pkgrel bash-completion"
+
+	install -Dm644 "$_cli_builddir"/contrib/completion/bash/$pkgname \
+		"$subpkgdir"/usr/share/bash-completion/completions/$pkgname
+}
+
+fishcomp() {
+	pkgdesc="Fish shell completion for Docker"
+	depends=""
+	install_if="$pkgname=$pkgver-r$pkgrel fish"
+
+	install -Dm644 "$_cli_builddir"/contrib/completion/fish/$pkgname.fish \
+		"$subpkgdir"/usr/share/fish/completions/$pkgname.fish
+}
+
+zshcomp() {
+	pkgdesc="Zsh completion for $pkgname"
+	depends=""
+	install_if="$pkgname=$pkgver-r$pkgrel zsh"
+
+	install -Dm644 "$_cli_builddir"/contrib/completion/zsh/_$pkgname \
+		"$subpkgdir"/usr/share/zsh/site-functions/_$pkgname
+}
+
+vim() {
+	pkgdesc="Vim syntax for Docker"
+	depends=""
+
+	local f=
+	for f in ftdetect/dockerfile.vim syntax/dockerfile.vim; do
+		install -Dm644 "$_daemon_builddir"/contrib/syntax/vim/$f \
+			"$subpkgdir"/usr/share/vim/vimfiles/$f
+	done
+}
+
+sha512sums="e968ced32c379b74602053d1e9fe9ee5abe595078bb8d5f0d994c7eafd1557158d58fa48489ca8d7d578dbc7a5241182288b3ab37885b53abb8364d7aa9d2a4f  docker-${pkgver}.tar.gz
+0cb0748812296294a87dda257dbf0947897a1ada2aa861ff3e65309a6bbecebbe798929845fca6f23b66fd0dc019bca0a032737c7192fe20618d8e1849866f3d  runc-${_runc_ver}.tar.gz
+c749bda691197ec8a7603db9ad92f2800a3f065143430a660333b7862518deb4c158a1c1fd01671dff438b40988d4a64d8f06bab05496b8728c6e2f57cd7da0a  containerd-${_containerd_ver}.tar.gz
+673ea638fa5c560d8238d7c1d88f114430f9d8efe701804bfe30044d0c059a688cbf6b62922be50834e16ee055ef6cf015f6232f76f0d942768f9e84e95496cd  libnetwork-${_libnetwork_ver}.tar.gz
+b6c1454f734662adf2fdedcb75cb7cdc82f4cf5b4c41fadf6891a670fa26d49b789034f4af8bf920b9e1ff1c3536123637ade9471f4ae2c1ef6c534e839b9f27  tini-${_tini_ver}.tar.gz
+54d570901f6f1e329883e3d348ed7370e9f68b73a01b72195bed3d37508cc82e82f6c6893f798c058da00e40ff2262baaa1514d274174a3f83508e1186c7a3c4  go-md2man-1.0.7.tar.gz
+e2d3865f90f20c144694a70b4b7b74baf636c31d9a1efedaa90135b01ee7673a17cfc51d4fbf11f220f9035ca52294b7ae4a61c42101da059911e4bba5b1918d  cobra-0.0.1.tar.gz
+29a343848d0aa14864c6bfc87c2a6fd408f546f0114e12f7035fb4678ee769fe728872a5d283803177990a61d7e02c4916017d5e45380ad3b0a2dffa3e746857  tini-cmake-fixes.patch
+9b24dc0c50904c3d12bb04c1a7df169651043ddbc258018647010a5aa01d8a19ad54d10ca79dce6d6283c81f4fa0cc8de417f6180dd824c5a588b22b23546cb5  docker-openrc-busybox-ash.patch
+61fc95110a4476595093e76e47a9bd66db936998249430df2710fffbc2885f78f16a6909b07dd4d228d8f2012714895578148cf7b0c2c27d8ecf92b055997ecd  lambda2-01-engine-add-support-for-build.patch
+00fe4d56e1a0528fe3747deea0392c0631b00ffd3a4ba50a506747fd435ea1728333bf9e7bfe9a1dbfbcbd4445c0a16fd2ce0fd0996fd97e59c3c6ca4c8a545e  lambda2-02-cli-add-support-for-build-time.patch
+720cfec82d0c4857c7f39cb973491a92afb2145f7cada658a63af53ceff9cc26e44c0a3fefdc976d2a31818003d4f8e1f367de0050ce51e5c70f0ce55f355f11  lambda2-03-engine-router-network-remove.patch
+f103a3bf60ffbc2e2747c8b78ed0a8b55dffa213b0cbca67b4cc6bc86ed6de96932a2fe3a781b239cb7b99ad201837a644849d18dff3c45b3b72343a3f437a77  lambda2-04-engine-router-system-remove.patch
+bbdd34b53a1bfbc3218cda044fc252d5dde0569f10c575dc039bac37c9b24e1b4b459df140504914e44606b57a052543385b76282cbd3a1172c2085fafa489b0  lambda2-05-engine-cmd-dockerd-drop.patch
+44d0eb21f22ef1325336e2b3e797c3b98d0d7fbd91eede849a01eb9680d5babb0632efd3975269c8608cbc51cd42ad61db1cb220b805d3751daf82a2e5319248  lambda2-06-engine-container_operations.patch
+0ec674b15ce35e34d74a66085987abbb111f7c4537781e4a725a5b23063726695284d5b1f4fc9e85a9d235a3fdfb750b9c2983512488ee8d8fb3e8962a40a8d0  lambda2-07-engine-daemon-events-remove.patch
+ed9a58a51704ce3967c6c8af38025817f699d23ed6b2f0047cd7a330c68c911daf0f3160bec50f32691875775fe5091335536f776ae309a5bdc24a77f268566f  lambda2-08-engine-cmd-dockerd-remove.patch
+9597deddcfe10973cb3d61527f09d3b04b0321a6a78e1cf63cfa083943f7d7a091335f7cf3a7fb1ec3834418821b6e722c82386a86594bdd22750557f293fd12  lambda2-09-cli-commands-remove-swarm.patch
+d1c2f88107d38d4b959fca5552a8ddde547e9cff720a8b6358e5eafc09d58410d40b49934bc8598425dc07c3e0a345d7c7b1fda3cb2bf8fa952d345eca351da5  lambda2-10-cli-commands-remove-support.patch
+30d2e84271a8146cd187aa7d065dff8d3dffaf50c4598cec6225a1f07bd4e99a7a8f893c9c35c69eea09c82c55fe25823506f68a818ac1d6d9fb3e3f022b9012  lambda2-11-engine-daemon-only-support.patch
+538097e450e18412aa206bca79b8529c98c4ec7a80529cb5b722d5884f268c34ab380b74d519400139d23394ac63f3273327fddda87ff2406039da6059712492  lambda2-12-engine-pkg-discovery-remove.patch
+de177518935b69a46f8337d70e1a6f8cadaa58b7563a24e29453958344edf929543c927cabb3e231a654f485c226fc3d03099b5a4082e7fd262ced63d6aadc58  lambda2-13-engine-daemon-only-attempt-to.patch"

@@ -1,0 +1,25 @@
+engine/daemon: only attempt to prune local networks since swarm is disabled
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/commit/1690a81f6e0bac37f8b295edc95d2881081cbfbc
+---
+ components/engine/daemon/prune.go |    3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/components/engine/daemon/prune.go b/components/engine/daemon/prune.go
+index 66eca2b..1dee0d5 100644
+--- a/components/engine/daemon/prune.go
++++ b/components/engine/daemon/prune.go
+@@ -421,9 +421,6 @@ func (daemon *Daemon) NetworksPrune(ctx context.Context, pruneFilters filters.Ar
+ 	}
+ 
+ 	rep := &types.NetworksPruneReport{}
+-	if clusterRep, err := daemon.clusterNetworksPrune(ctx, pruneFilters); err == nil {
+-		rep.NetworksDeleted = append(rep.NetworksDeleted, clusterRep.NetworksDeleted...)
+-	}
+ 
+ 	localRep := daemon.localNetworksPrune(ctx, pruneFilters)
+ 	rep.NetworksDeleted = append(rep.NetworksDeleted, localRep.NetworksDeleted...)

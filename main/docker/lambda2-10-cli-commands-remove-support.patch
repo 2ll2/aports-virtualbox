@@ -1,0 +1,33 @@
+cli/commands: remove support for docker plugins
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena-cli/pull/1
+---
+ components/cli/cli/command/commands/commands.go |    4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/components/cli/cli/command/commands/commands.go b/components/cli/cli/command/commands/commands.go
+index f0ef7bb..9f29dac 100644
+--- a/components/cli/cli/command/commands/commands.go
++++ b/components/cli/cli/command/commands/commands.go
+@@ -7,7 +7,6 @@ import (
+ 	"github.com/docker/cli/cli/command/container"
+ 	"github.com/docker/cli/cli/command/image"
+ 	"github.com/docker/cli/cli/command/network"
+-	"github.com/docker/cli/cli/command/plugin"
+ 	"github.com/docker/cli/cli/command/registry"
+ 	"github.com/docker/cli/cli/command/system"
+ 	"github.com/docker/cli/cli/command/volume"
+@@ -28,9 +27,6 @@ func AddCommands(cmd *cobra.Command, dockerCli *command.DockerCli) {
+ 		// network
+ 		network.NewNetworkCommand(dockerCli),
+ 
+-		// plugin
+-		plugin.NewPluginCommand(dockerCli),
+-
+ 		// registry
+ 		registry.NewLoginCommand(dockerCli),
+ 		registry.NewLogoutCommand(dockerCli),

@@ -1,0 +1,107 @@
+engine: add support for build time volumes
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+https://github.com/resin-os/balena/pull/27
+---
+ .../github.com/docker/docker/api/types/client.go   |    1 +
+ .../engine/api/server/router/build/build_routes.go |    9 +++++++++
+ components/engine/api/types/client.go              |    1 +
+ components/engine/builder/dockerfile/internals.go  |   10 ++++++++++
+ components/engine/client/image_build.go            |    6 ++++++
+ 5 files changed, 27 insertions(+)
+
+diff --git a/components/cli/vendor/github.com/docker/docker/api/types/client.go b/components/cli/vendor/github.com/docker/docker/api/types/client.go
+index 4ca9cca..83eb407 100644
+--- a/components/cli/vendor/github.com/docker/docker/api/types/client.go
++++ b/components/cli/vendor/github.com/docker/docker/api/types/client.go
+@@ -179,6 +179,7 @@ type ImageBuildOptions struct {
+ 	ExtraHosts  []string // List of extra hosts
+ 	Target      string
+ 	SessionID   string
++	Volumes     []string
+ 
+ 	// TODO @jhowardmsft LCOW Support: This will require extending to include
+ 	// `Platform string`, but is omitted for now as it's hard-coded temporarily
+diff --git a/components/engine/api/server/router/build/build_routes.go b/components/engine/api/server/router/build/build_routes.go
+index 2c9a947..198c674 100644
+--- a/components/engine/api/server/router/build/build_routes.go
++++ b/components/engine/api/server/router/build/build_routes.go
+@@ -136,6 +136,15 @@ func newImageBuildOptions(ctx context.Context, r *http.Request) (*types.ImageBui
+ 	}
+ 	options.SessionID = r.FormValue("session")
+ 
++	var volumes = []string{}
++	volumesJSON := r.FormValue("volumes")
++	if volumesJSON != "" {
++		if err := json.Unmarshal([]byte(volumesJSON), &volumes); err != nil {
++			return nil, err
++		}
++		options.Volumes = volumes
++	}
++
+ 	return options, nil
+ }
+ 
+diff --git a/components/engine/api/types/client.go b/components/engine/api/types/client.go
+index 18a1263..fc26a1c 100644
+--- a/components/engine/api/types/client.go
++++ b/components/engine/api/types/client.go
+@@ -179,6 +179,7 @@ type ImageBuildOptions struct {
+ 	ExtraHosts  []string // List of extra hosts
+ 	Target      string
+ 	SessionID   string
++	Volumes     []string
+ 
+ 	// TODO @jhowardmsft LCOW Support: This will require extending to include
+ 	// `Platform string`, but is ommited for now as it's hard-coded temporarily
+diff --git a/components/engine/builder/dockerfile/internals.go b/components/engine/builder/dockerfile/internals.go
+index b18118c..7d06d7e 100644
+--- a/components/engine/builder/dockerfile/internals.go
++++ b/components/engine/builder/dockerfile/internals.go
+@@ -11,6 +11,7 @@ import (
+ 	"strconv"
+ 	"strings"
+ 
++	"github.com/docker/cli/cli/compose/loader"
+ 	"github.com/docker/docker/api/types"
+ 	"github.com/docker/docker/api/types/backend"
+ 	"github.com/docker/docker/api/types/container"
+@@ -366,6 +367,14 @@ func (b *Builder) probeAndCreate(dispatchState *dispatchState, runConfig *contai
+ }
+ 
+ func (b *Builder) create(runConfig *container.Config) (string, error) {
++	// only allow bind-mounting during build
++	for _, bind := range b.options.Volumes {
++		parsed, _ := loader.ParseVolume(bind)
++		if parsed.Source == "" {
++			return "", fmt.Errorf("Cannot use non-bind mount during build: %s", bind)
++		}
++	}
++
+ 	hostConfig := hostConfigFromOptions(b.options)
+ 	container, err := b.containerManager.Create(runConfig, hostConfig, b.platform)
+ 	if err != nil {
+@@ -401,5 +410,6 @@ func hostConfigFromOptions(options *types.ImageBuildOptions) *container.HostConf
+ 		// Set a log config to override any default value set on the daemon
+ 		LogConfig:  defaultLogConfig,
+ 		ExtraHosts: options.ExtraHosts,
++		Binds:      options.Volumes,
+ 	}
+ }
+diff --git a/components/engine/client/image_build.go b/components/engine/client/image_build.go
+index 44a215f..b3c1f9a 100644
+--- a/components/engine/client/image_build.go
++++ b/components/engine/client/image_build.go
+@@ -124,5 +124,11 @@ func (cli *Client) imageBuildOptionsToQuery(options types.ImageBuildOptions) (ur
+ 		query.Set("session", options.SessionID)
+ 	}
+ 
++	volumesJSON, err := json.Marshal(options.Volumes)
++	if err != nil {
++		return query, err
++	}
++	query.Set("volumes", string(volumesJSON))
++
+ 	return query, nil
+ }

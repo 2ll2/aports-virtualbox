@@ -1,0 +1,72 @@
+engine/router/system: remove swarm dependency
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Makes the system commands only deal with the local daemon, ignoring
+swarm clusters.
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/pull/14
+---
+ .../engine/api/server/router/system/system.go      |    5 +----
+ .../api/server/router/system/system_routes.go      |    3 ---
+ components/engine/cmd/dockerd/daemon.go            |    2 +-
+ 3 files changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/components/engine/api/server/router/system/system.go b/components/engine/api/server/router/system/system.go
+index a64631e..6ce0f43 100644
+--- a/components/engine/api/server/router/system/system.go
++++ b/components/engine/api/server/router/system/system.go
+@@ -3,23 +3,20 @@ package system
+ import (
+ 	"github.com/docker/docker/api/server/router"
+ 	"github.com/docker/docker/builder/fscache"
+-	"github.com/docker/docker/daemon/cluster"
+ )
+ 
+ // systemRouter provides information about the Docker system overall.
+ // It gathers information about host, daemon and container events.
+ type systemRouter struct {
+ 	backend Backend
+-	cluster *cluster.Cluster
+ 	routes  []router.Route
+ 	builder *fscache.FSCache
+ }
+ 
+ // NewRouter initializes a new system router
+-func NewRouter(b Backend, c *cluster.Cluster, fscache *fscache.FSCache) router.Router {
++func NewRouter(b Backend, fscache *fscache.FSCache) router.Router {
+ 	r := &systemRouter{
+ 		backend: b,
+-		cluster: c,
+ 		builder: fscache,
+ 	}
+ 
+diff --git a/components/engine/api/server/router/system/system_routes.go b/components/engine/api/server/router/system/system_routes.go
+index 5884388..06e3638 100644
+--- a/components/engine/api/server/router/system/system_routes.go
++++ b/components/engine/api/server/router/system/system_routes.go
+@@ -35,9 +35,6 @@ func (s *systemRouter) getInfo(ctx context.Context, w http.ResponseWriter, r *ht
+ 	if err != nil {
+ 		return err
+ 	}
+-	if s.cluster != nil {
+-		info.Swarm = s.cluster.Info()
+-	}
+ 
+ 	if versions.LessThan(httputils.VersionFromContext(ctx), "1.25") {
+ 		// TODO: handle this conversion in engine-api
+diff --git a/components/engine/cmd/dockerd/daemon.go b/components/engine/cmd/dockerd/daemon.go
+index 5649fa2..84baf88 100644
+--- a/components/engine/cmd/dockerd/daemon.go
++++ b/components/engine/cmd/dockerd/daemon.go
+@@ -511,7 +511,7 @@ func initRouter(opts routerOptions) {
+ 		checkpointrouter.NewRouter(opts.daemon, decoder),
+ 		container.NewRouter(opts.daemon, decoder),
+ 		image.NewRouter(opts.daemon, decoder),
+-		systemrouter.NewRouter(opts.daemon, opts.cluster, opts.buildCache),
++		systemrouter.NewRouter(opts.daemon, opts.buildCache),
+ 		volume.NewRouter(opts.daemon),
+ 		build.NewRouter(opts.buildBackend, opts.daemon),
+ 		sessionrouter.NewRouter(opts.sessionManager),

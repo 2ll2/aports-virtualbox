@@ -1,0 +1,31 @@
+engine/cmd/dockerd: remove support for docker plugins
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/pull/14
+---
+ components/engine/cmd/dockerd/daemon.go |    2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/components/engine/cmd/dockerd/daemon.go b/components/engine/cmd/dockerd/daemon.go
+index 9cd83f2..52fe73a 100644
+--- a/components/engine/cmd/dockerd/daemon.go
++++ b/components/engine/cmd/dockerd/daemon.go
+@@ -19,7 +19,6 @@ import (
+ 	distributionrouter "github.com/docker/docker/api/server/router/distribution"
+ 	"github.com/docker/docker/api/server/router/image"
+ 	"github.com/docker/docker/api/server/router/network"
+-	pluginrouter "github.com/docker/docker/api/server/router/plugin"
+ 	sessionrouter "github.com/docker/docker/api/server/router/session"
+ 	systemrouter "github.com/docker/docker/api/server/router/system"
+ 	"github.com/docker/docker/api/server/router/volume"
+@@ -470,7 +469,6 @@ func initRouter(opts routerOptions) {
+ 		volume.NewRouter(opts.daemon),
+ 		build.NewRouter(opts.buildBackend, opts.daemon),
+ 		sessionrouter.NewRouter(opts.sessionManager),
+-		pluginrouter.NewRouter(opts.daemon.PluginManager()),
+ 		distributionrouter.NewRouter(opts.daemon),
+ 	}
+ 

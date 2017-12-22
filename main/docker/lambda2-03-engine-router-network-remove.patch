@@ -1,0 +1,179 @@
+engine/router/network: remove swarm dependency
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Network commands are built to query both the active cluster (if any) and
+the daemon. This commits makes them only deal with local networks.
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/pull/14
+---
+ .../engine/api/server/router/network/network.go    |    5 -
+ .../api/server/router/network/network_routes.go    |   81 --------------------
+ components/engine/cmd/dockerd/daemon.go            |    2 
+ 3 files changed, 3 insertions(+), 85 deletions(-)
+
+diff --git a/components/engine/api/server/router/network/network.go b/components/engine/api/server/router/network/network.go
+index eaf52aa..6d31cb4 100644
+--- a/components/engine/api/server/router/network/network.go
++++ b/components/engine/api/server/router/network/network.go
+@@ -2,21 +2,18 @@ package network
+ 
+ import (
+ 	"github.com/docker/docker/api/server/router"
+-	"github.com/docker/docker/daemon/cluster"
+ )
+ 
+ // networkRouter is a router to talk with the network controller
+ type networkRouter struct {
+ 	backend Backend
+-	cluster *cluster.Cluster
+ 	routes  []router.Route
+ }
+ 
+ // NewRouter initializes a new network router
+-func NewRouter(b Backend, c *cluster.Cluster) router.Router {
++func NewRouter(b Backend) router.Router {
+ 	r := &networkRouter{
+ 		backend: b,
+-		cluster: c,
+ 	}
+ 	r.initRoutes()
+ 	return r
+diff --git a/components/engine/api/server/router/network/network_routes.go b/components/engine/api/server/router/network/network_routes.go
+index ad3e74e..46a6ad7 100644
+--- a/components/engine/api/server/router/network/network_routes.go
++++ b/components/engine/api/server/router/network/network_routes.go
+@@ -14,7 +14,6 @@ import (
+ 	"github.com/docker/docker/api/types/network"
+ 	"github.com/docker/docker/api/types/versions"
+ 	"github.com/docker/libnetwork"
+-	netconst "github.com/docker/libnetwork/datastore"
+ 	"github.com/docker/libnetwork/networkdb"
+ 	"github.com/pkg/errors"
+ )
+@@ -48,20 +47,7 @@ func (n *networkRouter) getNetworksList(ctx context.Context, w http.ResponseWrit
+ 
+ 	list := []types.NetworkResource{}
+ 
+-	if nr, err := n.cluster.GetNetworks(); err == nil {
+-		list = append(list, nr...)
+-	}
+-
+-	// Combine the network list returned by Docker daemon if it is not already
+-	// returned by the cluster manager
+-SKIP:
+ 	for _, nw := range n.backend.GetNetworks() {
+-		for _, nl := range list {
+-			if nl.ID == nw.ID() {
+-				continue SKIP
+-			}
+-		}
+-
+ 		var nr *types.NetworkResource
+ 		// Versions < 1.28 fetches all the containers attached to a network
+ 		// in a network list api call. It is a heavy weight operation when
+@@ -152,40 +138,6 @@ func (n *networkRouter) getNetwork(ctx context.Context, w http.ResponseWriter, r
+ 		}
+ 	}
+ 
+-	nwk, err := n.cluster.GetNetwork(term)
+-	if err == nil {
+-		// If the get network is passed with a specific network ID / partial network ID
+-		// or if the get network was passed with a network name and scope as swarm
+-		// return the network. Skipped using isMatchingScope because it is true if the scope
+-		// is not set which would be case if the client API v1.30
+-		if strings.HasPrefix(nwk.ID, term) || (netconst.SwarmScope == scope) {
+-			return httputils.WriteJSON(w, http.StatusOK, nwk)
+-		}
+-	}
+-
+-	nr, _ := n.cluster.GetNetworks()
+-	for _, network := range nr {
+-		if network.ID == term && isMatchingScope(network.Scope, scope) {
+-			return httputils.WriteJSON(w, http.StatusOK, network)
+-		}
+-		if network.Name == term && isMatchingScope(network.Scope, scope) {
+-			// Check the ID collision as we are in swarm scope here, and
+-			// the map (of the listByFullName) may have already had a
+-			// network with the same ID (from local scope previously)
+-			if _, ok := listByFullName[network.ID]; !ok {
+-				listByFullName[network.ID] = network
+-			}
+-		}
+-		if strings.HasPrefix(network.ID, term) && isMatchingScope(network.Scope, scope) {
+-			// Check the ID collision as we are in swarm scope here, and
+-			// the map (of the listByPartialID) may have already had a
+-			// network with the same ID (from local scope previously)
+-			if _, ok := listByPartialID[network.ID]; !ok {
+-				listByPartialID[network.ID] = network
+-			}
+-		}
+-	}
+-
+ 	// Find based on full name, returns true only if no duplicates
+ 	if len(listByFullName) == 1 {
+ 		for _, v := range listByFullName {
+@@ -224,33 +176,9 @@ func (n *networkRouter) postNetworkCreate(ctx context.Context, w http.ResponseWr
+ 		return err
+ 	}
+ 
+-	if nws, err := n.cluster.GetNetworksByName(create.Name); err == nil && len(nws) > 0 {
+-		return libnetwork.NetworkNameError(create.Name)
+-	}
+-
+ 	nw, err := n.backend.CreateNetwork(create)
+ 	if err != nil {
+-		var warning string
+-		if _, ok := err.(libnetwork.NetworkNameError); ok {
+-			// check if user defined CheckDuplicate, if set true, return err
+-			// otherwise prepare a warning message
+-			if create.CheckDuplicate {
+-				return libnetwork.NetworkNameError(create.Name)
+-			}
+-			warning = libnetwork.NetworkNameError(create.Name).Error()
+-		}
+-
+-		if _, ok := err.(libnetwork.ManagerRedirectError); !ok {
+-			return err
+-		}
+-		id, err := n.cluster.CreateNetwork(create)
+-		if err != nil {
+-			return err
+-		}
+-		nw = &types.NetworkCreateResponse{
+-			ID:      id,
+-			Warning: warning,
+-		}
++		return err
+ 	}
+ 
+ 	return httputils.WriteJSON(w, http.StatusCreated, nw)
+@@ -294,13 +222,6 @@ func (n *networkRouter) deleteNetwork(ctx context.Context, w http.ResponseWriter
+ 	if err := httputils.ParseForm(r); err != nil {
+ 		return err
+ 	}
+-	if _, err := n.cluster.GetNetwork(vars["id"]); err == nil {
+-		if err = n.cluster.RemoveNetwork(vars["id"]); err != nil {
+-			return err
+-		}
+-		w.WriteHeader(http.StatusNoContent)
+-		return nil
+-	}
+ 	if err := n.backend.DeleteNetwork(vars["id"]); err != nil {
+ 		return err
+ 	}
+diff --git a/components/engine/cmd/dockerd/daemon.go b/components/engine/cmd/dockerd/daemon.go
+index edf8f40..5649fa2 100644
+--- a/components/engine/cmd/dockerd/daemon.go
++++ b/components/engine/cmd/dockerd/daemon.go
+@@ -521,7 +521,7 @@ func initRouter(opts routerOptions) {
+ 	}
+ 
+ 	if opts.daemon.NetworkControllerEnabled() {
+-		routers = append(routers, network.NewRouter(opts.daemon, opts.cluster))
++		routers = append(routers, network.NewRouter(opts.daemon))
+ 	}
+ 
+ 	if opts.daemon.HasExperimental() {

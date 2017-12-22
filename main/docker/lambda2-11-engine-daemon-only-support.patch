@@ -1,0 +1,29 @@
+engine/daemon: only support jsonfile and syslog log drivers
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/pull/7/commits/fe4d45c5dcbaddff51aebfe584a68e8fb9f44449
+---
+ components/engine/daemon/logdrivers_linux.go |    7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/components/engine/daemon/logdrivers_linux.go b/components/engine/daemon/logdrivers_linux.go
+index ad343c1..568770e 100644
+--- a/components/engine/daemon/logdrivers_linux.go
++++ b/components/engine/daemon/logdrivers_linux.go
+@@ -3,13 +3,6 @@ package daemon
+ import (
+ 	// Importing packages here only to make sure their init gets called and
+ 	// therefore they register themselves to the logdriver factory.
+-	_ "github.com/docker/docker/daemon/logger/awslogs"
+-	_ "github.com/docker/docker/daemon/logger/fluentd"
+-	_ "github.com/docker/docker/daemon/logger/gcplogs"
+-	_ "github.com/docker/docker/daemon/logger/gelf"
+-	_ "github.com/docker/docker/daemon/logger/journald"
+ 	_ "github.com/docker/docker/daemon/logger/jsonfilelog"
+-	_ "github.com/docker/docker/daemon/logger/logentries"
+-	_ "github.com/docker/docker/daemon/logger/splunk"
+ 	_ "github.com/docker/docker/daemon/logger/syslog"
+ )

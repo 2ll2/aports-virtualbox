@@ -1,0 +1,41 @@
+engine/pkg/discovery: remove consul,etcd,zookeeper backends
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+Signed-off-by: Petros Angelatos <petrosagg@gmail.com>
+
+https://github.com/resin-os/balena/pull/7/commits/380ba69d00cb56278b65b28571d4d7e000392ec3
+---
+ components/engine/pkg/discovery/kv/kv.go |   12 ------------
+ 1 file changed, 12 deletions(-)
+
+diff --git a/components/engine/pkg/discovery/kv/kv.go b/components/engine/pkg/discovery/kv/kv.go
+index e860b36..2b4193a 100644
+--- a/components/engine/pkg/discovery/kv/kv.go
++++ b/components/engine/pkg/discovery/kv/kv.go
+@@ -10,9 +10,6 @@ import (
+ 	"github.com/docker/go-connections/tlsconfig"
+ 	"github.com/docker/libkv"
+ 	"github.com/docker/libkv/store"
+-	"github.com/docker/libkv/store/consul"
+-	"github.com/docker/libkv/store/etcd"
+-	"github.com/docker/libkv/store/zookeeper"
+ 	"github.com/sirupsen/logrus"
+ )
+ 
+@@ -36,15 +33,6 @@ func init() {
+ 
+ // Init is exported
+ func Init() {
+-	// Register to libkv
+-	zookeeper.Register()
+-	consul.Register()
+-	etcd.Register()
+-
+-	// Register to internal discovery service
+-	discovery.Register("zk", &Discovery{backend: store.ZK})
+-	discovery.Register("consul", &Discovery{backend: store.CONSUL})
+-	discovery.Register("etcd", &Discovery{backend: store.ETCD})
+ }
+ 
+ // Initialize is exported

@@ -1,0 +1,45 @@
+cli: add support for build time volumes
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+https://github.com/resin-os/balena/pull/27
+---
+ components/cli/cli/command/image/build.go |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/components/cli/cli/command/image/build.go b/components/cli/cli/command/image/build.go
+index 5661e15..fb986e8 100644
+--- a/components/cli/cli/command/image/build.go
++++ b/components/cli/cli/command/image/build.go
+@@ -63,6 +63,7 @@ type buildOptions struct {
+ 	target         string
+ 	imageIDFile    string
+ 	stream         bool
++	volumes        opts.ListOpts
+ }
+ 
+ // dockerfileFromStdin returns true when the user specified that the Dockerfile
+@@ -85,6 +86,7 @@ func newBuildOptions() buildOptions {
+ 		ulimits:    opts.NewUlimitOpt(&ulimits),
+ 		labels:     opts.NewListOpts(opts.ValidateEnv),
+ 		extraHosts: opts.NewListOpts(opts.ValidateExtraHost),
++		volumes:    opts.NewListOpts(nil),
+ 	}
+ }
+ 
+@@ -138,6 +140,7 @@ func NewBuildCommand(dockerCli command.Cli) *cobra.Command {
+ 	flags.BoolVar(&options.squash, "squash", false, "Squash newly built layers into a single new layer")
+ 	flags.SetAnnotation("squash", "experimental", nil)
+ 	flags.SetAnnotation("squash", "version", []string{"1.25"})
++	flags.VarP(&options.volumes, "volume", "v", "Bind mount a volume")
+ 
+ 	flags.BoolVar(&options.stream, "stream", false, "Stream attaches to server to negotiate build context")
+ 	flags.SetAnnotation("stream", "experimental", nil)
+@@ -371,6 +374,7 @@ func runBuild(dockerCli command.Cli, options buildOptions) error {
+ 		Squash:         options.squash,
+ 		ExtraHosts:     options.extraHosts.GetAll(),
+ 		Target:         options.target,
++		Volumes:        options.volumes.GetAll(),
+ 		RemoteContext:  remote,
+ 	}
+ 

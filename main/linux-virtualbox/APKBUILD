@@ -9,7 +9,7 @@ pkgdesc="Linux kernel"
 url="https://kernel.org"
 depends="mkinitfs"
 makedepends="perl installkernel bash gmp-dev bc linux-headers xz"
-options="!strip !check "
+options="!strip !check"
 install=
 source="https://kernel.org/pub/linux/kernel/v4.x/linux-$pkgver.tar.xz
 

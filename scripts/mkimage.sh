@@ -16,7 +16,7 @@ set -e
 
 # deduce aports directory
 [ -n "$APORTS" ] || APORTS=$(realpath $(dirname $0)/../)
-[ -e "$APORTS/main/build-base" ] || die "Unable to deduce aports base checkout"
+[ -e "$APORTS/main/linux-virtualbox" ] || die "Unable to deduce aports base checkout"
 
 # 
 all_sections=""

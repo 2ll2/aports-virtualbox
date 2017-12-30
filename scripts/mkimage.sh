@@ -10,6 +10,9 @@
 
 set -e
 
+# 2ll2: Enable when additional debugging is required
+# set -x
+
 # get abuild configurables
 [ -e /usr/share/abuild/functions.sh ] || (echo "abuild not found" ; exit 1)
 . /usr/share/abuild/functions.sh
@@ -119,6 +122,7 @@ build_section() {
 				mv "$DESTDIR" "$WORKDIR/${_dir}"
 				_dirty="yes"
 			else
+				# 2ll2: Disable this so failure artifacts are available
 				rm -rf "$DESTDIR"
 				_fail="yes"
 				return 1

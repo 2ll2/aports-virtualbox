@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+/usr/sbin/VBoxService --disable-automount
+
+syslog "Started VBoxService"
+
+exit 0

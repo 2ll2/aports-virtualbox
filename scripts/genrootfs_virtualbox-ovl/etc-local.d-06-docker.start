@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+rc-service docker start || exit 1
+
+syslog "Docker started"
+
+exit 0

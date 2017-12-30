@@ -1,0 +1,89 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+mount_filesystem() {
+	local _device="$1"
+
+	# Create lambda-machine-local path
+	mkdir -p /var/lib/lambda-machine-local
+	mount -t ext4 -o rw ${_device} /var/lib/lambda-machine-local
+	syslog "Mounted disk with label ll-vbox-data to /var/lib/lambda-machine-local"
+}
+
+LABEL="ll-vbox-data"
+MAGIC="lambda-linux-vbox-disk, please format-me"
+
+LML_DATA_DEVICE=$(blkid -o device -l -t LABEL=$LABEL) || :
+syslog "LML_DATA_DEVICE"
+
+# If label exists, then mount the filesystem and exit successfully
+if [ ! -z "$LML_DATA_DEVICE" ]; then
+	mount_filesystem "$LML_DATA_DEVICE"
+	exit 0
+fi
+
+UNPARTITIONED_HD_DEVICE=$(fdisk -l | grep "doesn't contain a valid partition table" | head -n 1 | sed 's/Disk \(.*\) doesn.*/\1/')
+syslog "UNPARTITIONED_HD_DEVICE: ${UNPARTITIONED_HD_DEVICE}"
+
+# If label is not found, then we *must* have an unpartitioned HD device.
+# Otherwise we exit out with an error and fail the boot process.
+[ ! -z "$UNPARTITIONED_HD_DEVICE" ] || exit 1
+
+HEADER=$(dd if=$UNPARTITIONED_HD_DEVICE bs=1 count=${#MAGIC} 2>/dev/null)
+syslog "HEADER: ${HEADER}"
+
+# If the magic is incorrect, then it is *not* a disk created by Lambda Machine
+# Local. So, we exit with an error
+[ "$HEADER" = "$MAGIC" ] || exit 1
+
+# save ssh keys
+dd if=$UNPARTITIONED_HD_DEVICE of=/tmp/sshkeys.tar bs=1 count=4096
+mkdir -p /tmp/sshkeys
+$(cd /tmp/sshkeys; tar xvf ../sshkeys.tar) || :
+
+# clean up the first two sectors before creating partition table
+dd if=/dev/zero of=/dev/sda bs=1 count=4096
+
+# create GPT partition table
+sgdisk -og $UNPARTITIONED_HD_DEVICE
+syslog "Created partition table"
+
+# get the start and end sectors
+START_SECTOR=$(sgdisk -F $UNPARTITIONED_HD_DEVICE)
+END_SECTOR=$(sgdisk -E $UNPARTITIONED_HD_DEVICE)
+
+# create partition table
+sgdisk -n 1:${START_SECTOR}:${END_SECTOR} -c 1:Linux -t 1:8300 ${UNPARTITIONED_HD_DEVICE}
+syslog "Created partition ${UNPARTITIONED_HD_DEVICE}1"
+
+mkfs.ext4 -L ${LABEL} ${UNPARTITIONED_HD_DEVICE}1
+syslog "Formatted ${UNPARTITIONED_HD_DEVICE}1 as ext4 filesystem"
+
+# mount filesystem
+mount_filesystem "${UNPARTITIONED_HD_DEVICE}1"
+
+# setup the filesystem
+mkdir -p /var/lib/lambda-machine-local/root
+
+mkdir -p /var/lib/lambda-machine-local/home/ll-user
+chown ll-user:ll-user /var/lib/lambda-machine-local/home/ll-user
+chmod 700 /var/lib/lambda-machine-local/home/ll-user
+mkdir -p /var/lib/lambda-machine-local/home/ll-user/.ssh
+chown ll-user:ll-user /var/lib/lambda-machine-local/home/ll-user/.ssh
+chmod 700 /var/lib/lambda-machine-local/home/ll-user/.ssh
+
+mkdir -p /var/lib/lambda-machine-local/var/lib/docker
+
+# copy and cleanup ssh keys
+cp /tmp/sshkeys/.ssh/authorized_keys* /var/lib/lambda-machine-local/home/ll-user/.ssh/
+chown ll-user:ll-user /var/lib/lambda-machine-local/home/ll-user/.ssh/authorized_keys*
+chmod 644 /var/lib/lambda-machine-local/home/ll-user/.ssh/authorized_keys*
+
+rm -rf /tmp/sshkeys*
+
+exit 0

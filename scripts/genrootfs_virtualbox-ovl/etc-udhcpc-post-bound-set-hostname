@@ -1,0 +1,6 @@
+#!/bin/sh
+
+[ "$interface" != "eth1" ] && exit 0
+
+ip_addr=$(echo "$ip" | sed "s/\./\-/g")
+hostname "ip-${ip_addr}"

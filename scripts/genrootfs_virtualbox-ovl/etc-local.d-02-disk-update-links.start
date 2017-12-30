@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+su -l ll-user -c "ln -sf /var/lib/lambda-machine-local/home/ll-user/.ssh /home/ll-user/.ssh"
+
+rm -rf /var/lib/docker
+ln -sf /var/lib/lambda-machine-local/var/lib/docker /var/lib/docker
+
+syslog "Updated links from rootfs to /var/lib/lambda-machine-local"
+
+exit 0

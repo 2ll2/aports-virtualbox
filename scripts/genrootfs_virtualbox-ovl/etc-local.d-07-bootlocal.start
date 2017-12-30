@@ -1,0 +1,44 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+bootlocal="/var/lib/lambda-machine-local/bootlocal.sh"
+if [ ! -x "$bootlocal" ]; then
+	syslog "Creating new bootlocal.sh"
+	cat <<- 'EOF' > "$bootlocal"
+#!/bin/sh
+
+# This file is executed after starting docker daemon. You can customize this
+# file to introduce your changes. All changes to this file and other files in
+# /var/lib/lambda-machine-local are preserved across machine reboots.
+
+# OpenRC local expects this script to exit with an exit code of 0.
+
+# If you are looking to customize this file, we would like to give you an
+# additional pointer. You can create a local machine with --virtualbox-ui-type
+# gui. This will provide a window to the machine console. You can login to
+# machine with user name/password - ll-user/ll-user, sudo -i and investigate
+# the behavior of your changes. Syslog facility is available, so we recommend
+# logging messages to syslog.
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+syslog "Running bootlocal.sh"
+
+exit 0
+EOF
+	chmod 755 "$bootlocal"
+	exit 0
+fi
+
+. "$bootlocal"
+
+exit 0

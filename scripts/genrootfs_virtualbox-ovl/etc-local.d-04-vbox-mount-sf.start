@@ -1,0 +1,45 @@
+#!/bin/sh
+
+set -e
+
+syslog() {
+	logger -t $(basename $0) -- "$@"
+}
+
+mountOptions="iocharset=utf8,uid=500,gid=500"
+
+# adapted from boot2docker
+#
+# try mounting "$name" (which defaults to "$dir") at "$dir", but quietly clean
+# up empty directories if it fails
+try_mount_share() {
+	dir="$1"
+	name="${2:-$dir}"
+
+	# normalize "dir" to be definitively root-relative i.e., "/Users" and "Users"
+	# will both translate to "/Users" explicitly
+	dir="/${dir#/}"
+
+	mkdir -p "$dir" 2>/dev/null
+
+	# in Alpine Linux mount -t vboxsf doesn't work
+	if ! mount.vboxsf -o "$mountOptions" "$name" "$dir" 2>/dev/null; then
+		rmdir "$dir" 2>/dev/null || true
+		while [ "$(dirname "$dir")" != "$dir" ]; do
+			dir="$(dirname "$dir")"
+			rmdir "$dir" 2>/dev/null || break
+		done
+
+		return 1
+	fi
+
+	return 0
+}
+
+for line in $(VBoxControl --nologo sharedfolder list -automount | tail -n+3 | cut  -d ' ' -f 3); do
+	try_mount_share "$line"
+done
+
+syslog "Mounted VirtualBox shared folders"
+
+exit 0

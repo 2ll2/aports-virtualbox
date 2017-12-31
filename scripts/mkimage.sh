@@ -206,7 +206,7 @@ while [ $# -gt 0 ]; do
 	shift
 	case "$opt" in
 	--repository) REPODIR="$1"; shift ;;
-	--extra-repository) EXTRAREPOS="$EXTRAREPOS $1"; shift ;;
+	--extra-repository) EXTRAREPOS="$EXTRAREPOS,$1"; shift ;;
 	--workdir) WORKDIR="$1"; shift ;;
 	--outdir) OUTDIR="$1"; shift ;;
 	--tag) RELEASE="$1"; shift ;;
@@ -264,9 +264,11 @@ for ARCH in $req_arch; do
 			warning "no repository set"
 		fi
 		echo "$REPODIR" > "$APKROOT/etc/apk/repositories"
+		IFS=','
 		for repo in $EXTRAREPOS; do
 			echo "$repo" >> "$APKROOT/etc/apk/repositories"
 		done
+		IFS=$' \t\n'
 	fi
 	abuild-apk update --root "$APKROOT"
 

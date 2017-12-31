@@ -17,7 +17,7 @@ build_kernel() {
 section_kernels() {
 	local _f _a _pkgs
 	for _f in $kernel_flavors; do
-		_pkgs="linux-$_f linux-firmware"
+		_pkgs="linux-${_f}${kernel_flavors_repo} linux-firmware"
 		for _a in $kernel_addons; do
 			_pkgs="$_pkgs $_a-$_f"
 		done

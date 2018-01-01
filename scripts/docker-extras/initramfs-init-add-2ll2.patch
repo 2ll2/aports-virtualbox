@@ -1,0 +1,92 @@
+initramfs-init: Add 2ll2 virtualbox support
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+
+---
+ initramfs-init |   58 +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 57 insertions(+), 1 deletion(-)
+
+diff --git a/initramfs-init b/initramfs-init
+index 357fe3e..40485f3 100755
+--- a/initramfs-init
++++ b/initramfs-init
+@@ -21,6 +21,10 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ mount -t proc -o noexec,nosuid,nodev proc /proc
+ mount -t sysfs -o noexec,nosuid,nodev sysfs /sys
+ 
++# 2ll2: Enable when required to debug initramfs
++# echo "Bailing out..."
++# exec /bin/busybox sh
++
+ # some helpers
+ ebegin() {
+ 	last_emsg="$*"
+@@ -265,7 +269,7 @@ set -- $(cat /proc/cmdline)
+ myopts="alpine_dev autodetect autoraid chart cryptroot cryptdm cryptheader cryptoffset
+ 	cryptdiscards debug_init dma init_args keep_apk_new modules ovl_dev pkgs quiet
+ 	root_size root usbdelay ip alpine_repo apkovl alpine_start splash blacklist
+-	overlaytmpfs rootfstype rootflags nbd resume"
++	overlaytmpfs rootfstype rootflags nbd resume rootfs_cpio"
+ 
+ for opt; do
+ 	case "$opt" in
+@@ -353,6 +357,58 @@ if [ -f /etc/modules ] ; then
+ fi
+ eend 0
+ 
++# 2ll2: VirtualBox
++if [ -n "$KOPT_rootfs_cpio" ]; then
++	if [ "$SINGLEMODE" = "yes" ]; then
++		echo "Entering single mode. Type 'exit' to continue booting."
++		sh
++	fi
++
++	ebegin "Mounting rootfs_cpio"
++
++	# create /dev entries
++	nlplug-findfs -p /sbin/mdev ${KOPT_debug_init:+-d} sr0
++
++	# mount tmpfs sysroot
++	rootflags="mode=0755"
++	mount -t tmpfs -o $rootflags tmpfs $sysroot
++
++	# mount cdrom and extract rootfs.cpio.gz to $sysroot
++	mount -t iso9660 -o ro /dev/cdrom /media/cdrom
++	$(cd $sysroot; zcat /media/cdrom/rootfs.cpio.gz | cpio -idm)
++	eend $?
++
++	# setup bootchart for switch_root
++	chart_init=""
++	if [ "$KOPT_chart" = yes ]; then
++		/sbin/bootchartd stop-initfs "$sysroot"
++		chart_init="/sbin/bootchartd start-rootfs"
++	fi
++
++	if [ ! -x $sysroot/sbin/init ]; then
++		[ "$KOPT_splash" != "no" ] && echo exit > $sysroot/$splashfile
++		echo "/sbin/init not found in new root. Launching emergency recovery shell"
++		echo "Type exit to continue boot."
++		/bin/busybox sh
++	fi
++
++	# switch over to new root
++	cat /proc/mounts | while read DEV DIR TYPE OPTS ; do
++		if [ "$DIR" != "/" -a "$DIR" != "$sysroot" -a -d "$DIR" ]; then
++			mkdir -p $sysroot/$DIR
++			mount -o move $DIR $sysroot/$DIR
++		fi
++	done
++	sync
++
++	echo ""
++	exec /bin/busybox switch_root $sysroot $chart_init /sbin/init $KOPT_init_args
++
++	echo "initramfs emergency recovery shell launched"
++	exec /bin/busybox sh
++	reboot
++fi
++
+ if [ -n "$KOPT_cryptroot" ]; then
+ 	cryptopts="-c ${KOPT_cryptroot}"
+ 	if [ "$KOPT_cryptdiscards" = "yes" ]; then

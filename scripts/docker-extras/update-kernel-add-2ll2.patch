@@ -1,0 +1,67 @@
+update-kernel: Add 2ll2 virtualbox support
+
+From: Rajiv M Ranganath <rajiv.ranganath@atihita.com>
+
+
+---
+ update-kernel |   15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/update-kernel b/update-kernel
+index 3e5fb49..5f21d30 100755
+--- a/update-kernel
++++ b/update-kernel
+@@ -8,6 +8,8 @@
+ # Copyright (c) 2014 Timo Teräs
+ # Copyright (c) 2014-2015 Kaarle Ritvanen
+ 
++# 2ll2: Enable when additional debugging is required
++# set -x
+ 
+ SCRIPT=update-kernel
+ VIRTUAL=.tmp-$SCRIPT
+@@ -160,9 +162,11 @@ clean_up() {
+ 	if [ "$SUPERUSER" ] && [ -z "$FAKEROOTKEY" ]; then
+ 		apk del $QUIET_OPT $VIRTUAL
+ 	fi
++	# 2ll2: Disable this so artifacts are available
+ 	rm -fr $TMPDIR
+ }
+ 
++# 2ll2: Disable so prevent cleanup
+ trap clean_up EXIT $SIGNALS
+ 
+ 
+@@ -220,7 +224,6 @@ else
+ 		PACKAGES="$(extra_pkgs "dahdi-linux-$FLAVOR" dahdi-linux)
+ 			$(extra_pkgs "xtables-addons-$FLAVOR")"
+ 	fi
+-	PACKAGES="$PACKAGES linux-$FLAVOR linux-firmware"
+ fi
+ _apk add --no-scripts alpine-base $PACKAGES
+ 
+@@ -238,7 +241,9 @@ depmod -b $ROOT "$KVER"
+ 
+ STAGING=$TMPDIR/boot
+ MODLOOP=$TMPDIR/modloop
+-MODIMG=modloop-$FLAVOR
++# 2ll2: We use KVER (X.Y.Z-A.arch-flavor) as suffix. This lets us quickly
++# identify the kernel we are working with.
++MODIMG=modloop-$KVER
+ 
+ mkdir $MODLOOP $STAGING
+ cp -a $ROOT/lib/modules $MODLOOP
+@@ -251,10 +256,10 @@ done
+ mksquashfs $MODLOOP "$STAGING/$MODIMG" -comp xz -exit-on-error
+ 
+ mkinitfs $MKINITFS_ARGS -q -b $ROOT -F "$features base squashfs" \
+-	-o "$STAGING/initramfs-$FLAVOR" "$KVER"
++	-o "$STAGING/initramfs-$KVER" "$KVER"
+ 
+-for file in System.map config vmlinuz; do
+-	cp "$BOOT/$file$KVER_FLAVOR" $STAGING
++for file in vmlinuz; do
++	cp "$BOOT/$file-$KVER" $STAGING
+ done
+ 
+ if [ "$MNTDIR" ]; then

@@ -15,13 +15,9 @@ Go to the _parent_ directory containing `aports-virtualbox` tree.
 
 ```
 $ docker run --rm -ti -v $(pwd):/home/builder/src -v /tmp:/tmp \
-       image-builder-virtualbox /bin/sh
+       image-builder-virtualbox /bin/su -l -s /bin/sh builder
 
-# apk update
-
-# su -l -s /bin/sh builder
-
-e30e9cd62ad3:~$
+e30e9cd62ad3:~$ sudo apk update
 
 e30e9cd62ad3:~$ cd src/aports-virtualbox/scripts/
 

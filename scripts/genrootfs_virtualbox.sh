@@ -166,6 +166,10 @@ sudo sh -c "echo 'PasswordAuthentication no' >> $tmprootfs/etc/ssh/sshd_config"
 sudo sh -c "echo 'ChallengeResponseAuthentication no' >> $tmprootfs/etc/ssh/sshd_config"
 sudo sh -c "echo 'UseDNS no' >> $tmprootfs/etc/ssh/sshd_config"
 
+# enable docker experimental flag
+sudo sh -c "sed -i -e '/DOCKER_OPTS/d' $tmprootfs/etc/conf.d/docker"
+sudo sh -c "echo 'DOCKER_OPTS=\"--experimental=true\"' >> $tmprootfs/etc/conf.d/docker"
+
 # setup openrc local scripts
 local_scripts="
 	01-disk-setup.start

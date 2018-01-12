@@ -1,4 +1,4 @@
-FROM 2ll2/repo-virtualbox:v3.7-5615fda-x86_64 AS repo-virtualbox
+FROM 2ll2/repo-virtualbox:v3.7-a74125d-x86_64 AS repo-virtualbox
 
 FROM alpine:3.7
 

@@ -2,7 +2,7 @@
 
 flavor=virtualbox
 pkgname=linux-${flavor}
-pkgver=4.9.65
+pkgver=4.9.71
 
 pkgrel=0
 pkgdesc="Linux kernel"
@@ -141,6 +141,6 @@ dev() {
                 "$subpkgdir"/lib/modules/${kernel_ver}/build
 }
 
-sha512sums="a375d091490e6ab924824d15fbc7ca8876194e63baee772d51af27fefab95f54c3328045cf397a05c0e34f309f4e4f69e7ec333946ff13ed36c989f29ae413df  linux-4.9.65.tar.xz
-d652dc262e74b16749870f791e1e897b0eef77e19d3151004e5e3d31ae00252a302bc82be1f28378bccf84d8553063ff947574b2414014a84b8ecc84b51a34c0  config-virtualbox.x86_64
-e0e056c122d53b9057db415f55ba6771b645f0c6ec9f8145bb765cc22e5eb51ed0fb40ba9a7a9e24bc6f2f42efb157bb813d30fa54555d5eb1904823c839dad6  generated-kernel-patch.patch"
+sha512sums="1782a2d8e56e5fd806b4a372087ffde8902eb002a9ae5074d3d54ba9b2a03a8ae14e116a7a49b1d71a5aba4f464351d8c26220c62698bf5f14981a024bc7c412  linux-4.9.71.tar.xz
+4ec612486f6cc417c32510ffd524ed80e1341af9bba6aff7f0838457f23f6499b14f9e4184017ad2d978082c3efdf0b7b462bff2ff7f100edd6d175cf619628d  generated-kernel-patch.patch
+7a4a55984dab06c35422a95644b35de73b0f82a095e6605a3b88027610f0d6b4e200046af2116ea539e21663aab32a7edef698ceb49b176d76ea3f786fc98c77  config-virtualbox.x86_64"

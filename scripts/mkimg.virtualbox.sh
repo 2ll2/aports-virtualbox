@@ -17,8 +17,8 @@ profile_virtualbox() {
 	# volume label `lambda-linux-vX.Y.Z` is used by lambda-machine-local.
 	# We can have only one `-v` in this string. Hence we don't include
 	# `-vbox` in the label
-	lambda2_volume_label="lambda-linux-v1801.1.0"
-	lambda2_rel_ver="2018.01.1"
+	lambda2_volume_label="lambda-linux-v1801.2.0"
+	lambda2_rel_ver="2018.01.2"
 }
 
 section_rootfs_isovbox() {
